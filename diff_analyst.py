@@ -2,7 +2,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import statistics
 from models import *
-from database import Database
+from database import Database, DBCommit, DBPullRequest, DBCIJob, DBAuthor, DBRepository, DBPullRequestReview
 import math
 
 
@@ -22,10 +22,10 @@ class DiffAnalyst:
         alerts = []
         
         with self.db.get_session() as session:
-            commits = session.query(self.db.DBCommit).filter(
-                self.db.DBCommit.repository_id == repository_id,
-                self.db.DBCommit.timestamp >= start_date,
-                self.db.DBCommit.timestamp <= end_date
+            commits = session.query(DBCommit).filter(
+                DBCommit.repository_id == repository_id,
+                DBCommit.timestamp >= start_date,
+                DBCommit.timestamp <= end_date
             ).all()
             
             author_churn = {}
@@ -91,11 +91,11 @@ class DiffAnalyst:
             period_start = current_start - (period_delta * i)
             period_end = current_start - (period_delta * (i - 1))
             
-            commits = session.query(self.db.DBCommit).filter(
-                self.db.DBCommit.author_id == author_id,
-                self.db.DBCommit.repository_id == repository_id,
-                self.db.DBCommit.timestamp >= period_start,
-                self.db.DBCommit.timestamp < period_end
+            commits = session.query(DBCommit).filter(
+                DBCommit.author_id == author_id,
+                DBCommit.repository_id == repository_id,
+                DBCommit.timestamp >= period_start,
+                DBCommit.timestamp < period_end
             ).all()
             
             period_churn = sum(commit.additions + commit.deletions for commit in commits)
@@ -119,27 +119,27 @@ class DiffAnalyst:
                              author_id: Optional[int] = None) -> DORAMetrics:
         
         with self.db.get_session() as session:
-            commits_query = session.query(self.db.DBCommit).filter(
-                self.db.DBCommit.repository_id == repository_id,
-                self.db.DBCommit.timestamp >= start_date,
-                self.db.DBCommit.timestamp <= end_date
+            commits_query = session.query(DBCommit).filter(
+                DBCommit.repository_id == repository_id,
+                DBCommit.timestamp >= start_date,
+                DBCommit.timestamp <= end_date
             )
             
-            prs_query = session.query(self.db.DBPullRequest).filter(
-                self.db.DBPullRequest.repository_id == repository_id,
-                self.db.DBPullRequest.created_at >= start_date,
-                self.db.DBPullRequest.created_at <= end_date
+            prs_query = session.query(DBPullRequest).filter(
+                DBPullRequest.repository_id == repository_id,
+                DBPullRequest.created_at >= start_date,
+                DBPullRequest.created_at <= end_date
             )
             
-            ci_jobs_query = session.query(self.db.DBCIJob).filter(
-                self.db.DBCIJob.repository_id == repository_id,
-                self.db.DBCIJob.started_at >= start_date,
-                self.db.DBCIJob.started_at <= end_date
+            ci_jobs_query = session.query(DBCIJob).filter(
+                DBCIJob.repository_id == repository_id,
+                DBCIJob.started_at >= start_date,
+                DBCIJob.started_at <= end_date
             )
             
             if author_id:
-                commits_query = commits_query.filter(self.db.DBCommit.author_id == author_id)
-                prs_query = prs_query.filter(self.db.DBPullRequest.author_id == author_id)
+                commits_query = commits_query.filter(DBCommit.author_id == author_id)
+                prs_query = prs_query.filter(DBPullRequest.author_id == author_id)
             
             commits = commits_query.all()
             prs = prs_query.all()
@@ -233,8 +233,8 @@ class DiffAnalyst:
         
         review_times = []
         for pr in prs:
-            reviews = session.query(self.db.DBPullRequestReview).filter(
-                self.db.DBPullRequestReview.pull_request_id == pr.id
+            reviews = session.query(DBPullRequestReview).filter(
+                DBPullRequestReview.pull_request_id == pr.id
             ).all()
             
             if reviews:
@@ -274,10 +274,10 @@ class DiffAnalyst:
     def analyze_file_change_patterns(self, repository_id: int, start_date: datetime, 
                                    end_date: datetime) -> Dict[str, Any]:
         with self.db.get_session() as session:
-            commits = session.query(self.db.DBCommit).filter(
-                self.db.DBCommit.repository_id == repository_id,
-                self.db.DBCommit.timestamp >= start_date,
-                self.db.DBCommit.timestamp <= end_date
+            commits = session.query(DBCommit).filter(
+                DBCommit.repository_id == repository_id,
+                DBCommit.timestamp >= start_date,
+                DBCommit.timestamp <= end_date
             ).all()
             
             file_change_frequency = {}

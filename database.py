@@ -247,6 +247,10 @@ class Database:
     def create_tables(self):
         Base.metadata.create_all(bind=self.engine)
     
+    def create_all(self):
+        """Alias for create_tables for compatibility"""
+        self.create_tables()
+    
     def get_session(self) -> Session:
         return self.SessionLocal()
     
@@ -275,12 +279,17 @@ class Database:
                                            commit_data["repository"]["full_name"],
                                            commit_data["repository"]["owner"])
         
+        # Handle timestamp conversion
+        timestamp = commit_data["timestamp"]
+        if isinstance(timestamp, str):
+            timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        
         commit = DBCommit(
             sha=commit_data["sha"],
             message=commit_data["message"],
             author_id=author.id,
             repository_id=repo.id,
-            timestamp=commit_data["timestamp"],
+            timestamp=timestamp,
             url=commit_data["url"],
             additions=commit_data["diff_stats"]["additions"],
             deletions=commit_data["diff_stats"]["deletions"],
@@ -298,6 +307,12 @@ class Database:
                                            pr_data["repository"]["full_name"],
                                            pr_data["repository"]["owner"])
         
+        # Handle timestamp conversion
+        def parse_timestamp(ts):
+            if ts and isinstance(ts, str):
+                return datetime.fromisoformat(ts.replace('Z', '+00:00'))
+            return ts
+        
         pr = DBPullRequest(
             github_id=pr_data["id"],
             number=pr_data["number"],
@@ -305,10 +320,10 @@ class Database:
             state=pr_data["state"],
             author_id=author.id,
             repository_id=repo.id,
-            created_at=pr_data["created_at"],
-            updated_at=pr_data["updated_at"],
-            closed_at=pr_data.get("closed_at"),
-            merged_at=pr_data.get("merged_at"),
+            created_at=parse_timestamp(pr_data["created_at"]),
+            updated_at=parse_timestamp(pr_data["updated_at"]),
+            closed_at=parse_timestamp(pr_data.get("closed_at")),
+            merged_at=parse_timestamp(pr_data.get("merged_at")),
             draft=pr_data.get("draft", False),
             url=pr_data["url"],
             base_branch=pr_data["base_branch"],

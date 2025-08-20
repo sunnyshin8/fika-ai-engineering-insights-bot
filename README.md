@@ -74,6 +74,31 @@ Original work only; public libs are fine. Don’t commit real secrets. We may op
 
 ---
 
+## Setup Instructions
+
+1. Copy `.env.example` to `.env`:
+	```sh
+	cp .env.example .env
+	```
+
+2. Obtain your OpenAI and Gemini API tokens, create a Slack bot, and add these values to your `.env` file.
+
+3. Generate seed data:
+	```sh
+	python seed_data.py
+	```
+
+4. Start the bot:
+	```sh
+	python main.py
+	```
+
+5. Usage (in Slack):
+	- `/dev-help`
+	- `/dev-report [daily|weekly|monthly] [repo_owner/repo_name]`
+
+---
+
 ### Quick Reference Links
 
 * LangChain docs ([python.langchain.com][1]) – prompt, tool and memory helpers.

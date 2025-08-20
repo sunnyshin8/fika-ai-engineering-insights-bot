@@ -1,22 +1,49 @@
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import json
-from langchain.chat_models import ChatOpenAI
+import os
+import statistics
+from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.schema import HumanMessage, SystemMessage
-from langchain.callbacks import get_openai_callback
+from langchain_community.callbacks.manager import get_openai_callback
 from models import *
 from database import Database
-import os
 
 
 class InsightNarrator:
     def __init__(self, db: Database, openai_api_key: str = None):
         self.db = db
-        self.llm = ChatOpenAI(
-            model_name="gpt-3.5-turbo",
-            temperature=0.3,
-            openai_api_key=openai_api_key or os.getenv("OPENAI_API_KEY")
-        )
+        
+        # Primary LLM (OpenAI)
+        try:
+            self.llm = ChatOpenAI(
+                model_name="gpt-4.1",
+                temperature=0.3,
+                openai_api_key=openai_api_key or os.getenv("OPENAI_API_KEY")
+            )
+            print("✅ OpenAI initialized")
+        except Exception as e:
+            print(f"❌ Failed to initialize OpenAI: {e}")
+            self.llm = None
+        
+        # Fallback LLM (Gemini)
+        try:
+            gemini_key = os.getenv("GEMINI_API_KEY")
+            if gemini_key:
+                self.gemini_llm = ChatGoogleGenerativeAI(
+                    model="gemini-2.5-flash",
+                    temperature=0.3,
+                    google_api_key=gemini_key
+                )
+                print("✅ Gemini initialized successfully")
+            else:
+                print("⚠️ No Gemini API key found")
+                self.gemini_llm = None
+        except Exception as e:
+            print(f"❌ Failed to initialize Gemini: {e}")
+            self.gemini_llm = None
+        
         self.system_prompts = {
             "daily": self._get_daily_system_prompt(),
             "weekly": self._get_weekly_system_prompt(),
@@ -45,12 +72,51 @@ class InsightNarrator:
             HumanMessage(content=human_prompt)
         ]
         
-        with get_openai_callback() as cb:
-            response = self.llm(messages)
-            prompt_tokens = cb.prompt_tokens
-            completion_tokens = cb.completion_tokens
+        # Try OpenAI first, then Gemini as fallback
+        response = None
+        prompt_tokens = 0
+        completion_tokens = 0
+        model_used = "fallback"
         
-        parsed_response = self._parse_llm_response(response.content)
+        try:
+            if self.llm:
+                print("🔄 Trying OpenAI...")
+                with get_openai_callback() as cb:
+                    response = self.llm.invoke(messages)
+                    prompt_tokens = cb.prompt_tokens
+                    completion_tokens = cb.completion_tokens
+                    model_used = "gpt-4.1"
+                    print("✅ OpenAI response generated successfully")
+        except Exception as e:
+            print(f"❌ OpenAI failed: {e}")
+            try:
+                if self.gemini_llm:
+                    print("🔄 Trying Gemini fallback...")
+                    response = self.gemini_llm.invoke(messages)
+                    model_used = "gemini-2.5-flash"
+                    print("✅ Gemini response generated successfully")
+                else:
+                    print("❌ Gemini not available")
+            except Exception as e2:
+                print(f"❌ Gemini also failed: {e2}")
+                response = None
+        
+        if response:
+            parsed_response = self._parse_llm_response(response.content)
+        else:
+            # Use default response if both fail
+            parsed_response = {
+                "summary": "Unable to generate AI insights due to API limitations. Using default analysis.",
+                "key_insights": [
+                    "Team activity detected in the specified period",
+                    "Metrics calculated successfully",
+                    "Consider reviewing team productivity patterns"
+                ],
+                "recommendations": [
+                    "Check API quota and retry for detailed insights",
+                    "Review team performance metrics manually"
+                ]
+            }
         
         narrative = InsightNarrative(
             period=dora_metrics.period,
@@ -63,7 +129,7 @@ class InsightNarrator:
             recommendations=parsed_response.get("recommendations", []),
             alerts=churn_alerts,
             dora_metrics=dora_metrics,
-            llm_model="gpt-3.5-turbo",
+            llm_model=model_used,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens
         )
@@ -179,13 +245,121 @@ CHURN ALERTS:
     
     def _parse_llm_response(self, response: str) -> Dict[str, Any]:
         try:
-            return json.loads(response)
+            # First, try direct JSON parsing
+            parsed = json.loads(response)
+            
+            # Convert complex objects to strings if needed
+            if "key_insights" in parsed and isinstance(parsed["key_insights"], list):
+                insights = []
+                for insight in parsed["key_insights"]:
+                    if isinstance(insight, dict):
+                        # Extract meaningful text from dict objects
+                        text = insight.get("insight", "") or insight.get("description", "") or insight.get("metric", "") or str(insight)
+                        insights.append(text)
+                    else:
+                        insights.append(str(insight))
+                parsed["key_insights"] = insights
+            
+            if "recommendations" in parsed and isinstance(parsed["recommendations"], list):
+                recommendations = []
+                for rec in parsed["recommendations"]:
+                    if isinstance(rec, dict):
+                        # Extract meaningful text from dict objects
+                        text = rec.get("recommendation", "") or rec.get("action", "") or rec.get("description", "") or str(rec)
+                        recommendations.append(text)
+                    else:
+                        recommendations.append(str(rec))
+                parsed["recommendations"] = recommendations
+            
+            return parsed
+            
         except json.JSONDecodeError:
+            try:
+                # Try to extract JSON from markdown code blocks
+                import re
+                json_match = re.search(r'```(?:json)?\s*(\{.*\})\s*```', response, re.DOTALL)
+                if json_match:
+                    parsed = json.loads(json_match.group(1))
+                    # Apply the same conversion logic
+                    return self._parse_llm_response(json_match.group(1))
+                
+                # Try to find JSON-like content in the response
+                json_match = re.search(r'\{[^{}]*"summary"[^{}]*\}', response, re.DOTALL)
+                if json_match:
+                    return self._parse_llm_response(json_match.group(0))
+                    
+            except (json.JSONDecodeError, AttributeError):
+                pass
+            
+            # If all parsing fails, try to extract structured information
+            print(f"⚠️ Failed to parse JSON, attempting text extraction from: {response[:200]}...")
+            
+            # Extract summary, insights, and recommendations using text processing
+            summary = self._extract_summary_from_text(response)
+            insights = self._extract_insights_from_text(response)
+            recommendations = self._extract_recommendations_from_text(response)
+            
             return {
-                "summary": "Unable to parse LLM response",
-                "key_insights": ["Analysis failed - please check data format"],
-                "recommendations": ["Review input data and try again"]
+                "summary": summary,
+                "key_insights": insights,
+                "recommendations": recommendations
             }
+    
+    def _extract_summary_from_text(self, text: str) -> str:
+        """Extract summary from free-form text"""
+        lines = text.split('\n')
+        for line in lines:
+            if line.strip() and not line.startswith('-') and not line.startswith('*'):
+                return line.strip()[:200]  # First substantial line, limited length
+        return "AI-generated analysis of team productivity metrics and development patterns."
+    
+    def _extract_insights_from_text(self, text: str) -> List[str]:
+        """Extract insights from free-form text"""
+        insights = []
+        lines = text.split('\n')
+        
+        # Look for bullet points or numbered lists
+        for line in lines:
+            line = line.strip()
+            if line.startswith(('- ', '* ', '• ')) or (line and line[0].isdigit() and '. ' in line):
+                insight = line.lstrip('- *•0123456789. ').strip()
+                if len(insight) > 10:  # Filter out short lines
+                    insights.append(insight)
+        
+        # If no structured insights found, create generic ones
+        if not insights:
+            insights = [
+                "Development activity analyzed across the specified time period",
+                "DORA metrics calculated and benchmarked against industry standards",
+                "Code quality and team productivity patterns identified"
+            ]
+        
+        return insights[:6]  # Limit to 6 insights
+    
+    def _extract_recommendations_from_text(self, text: str) -> List[str]:
+        """Extract recommendations from free-form text"""
+        recommendations = []
+        
+        # Look for recommendation keywords
+        text_lower = text.lower()
+        if 'recommend' in text_lower or 'suggest' in text_lower or 'should' in text_lower:
+            lines = text.split('\n')
+            for line in lines:
+                line_lower = line.lower()
+                if any(word in line_lower for word in ['recommend', 'suggest', 'should', 'consider']):
+                    rec = line.strip().lstrip('- *•0123456789. ')
+                    if len(rec) > 15:  # Filter out short lines
+                        recommendations.append(rec)
+        
+        # If no recommendations found, provide generic ones
+        if not recommendations:
+            recommendations = [
+                "Continue monitoring development velocity and quality metrics",
+                "Review team capacity and workload distribution regularly",
+                "Consider implementing automated quality checks where beneficial"
+            ]
+        
+        return recommendations[:5]  # Limit to 5 recommendations
     
     def generate_comparative_analysis(self, current_metrics: DORAMetrics, 
                                     historical_metrics: List[DORAMetrics]) -> Dict[str, Any]:

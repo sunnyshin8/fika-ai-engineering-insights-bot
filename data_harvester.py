@@ -257,14 +257,21 @@ class GitHubDataHarvester:
     
     def save_events_to_db(self, events: List[GitHubEvent]):
         with self.db.get_session() as session:
+            commits_saved = 0
+            prs_saved = 0
+            
             for event in events:
                 try:
                     if event.type == EventType.COMMIT:
                         self.db.save_commit(session, event.payload)
+                        commits_saved += 1
                     elif event.type == EventType.PULL_REQUEST:
                         self.db.save_pull_request(session, event.payload)
+                        prs_saved += 1
                 except Exception as e:
                     print(f"Error saving event {event.id}: {e}")
+            
+            print(f"✅ Saved {commits_saved} commits and {prs_saved} pull requests to database")
     
     def generate_seed_data(self) -> List[GitHubEvent]:
         events = []
