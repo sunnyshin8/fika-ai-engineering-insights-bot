@@ -222,7 +222,7 @@ class FikaSlackBot:
         
         # Add processing messages for transparency
         if messages:
-            process_text = "\n".join([f"• {msg}" for msg in messages[-3:]])  # Show last 3 messages
+            process_text = "\n".join([f"• {msg}" for msg in messages[-3:]])  
             blocks.extend([
                 {
                     "type": "divider"

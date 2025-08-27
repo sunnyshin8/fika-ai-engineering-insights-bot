@@ -2,6 +2,35 @@
 
 *[Learn more at **powersmy.biz**](https://powersmy.biz/)*
 
+## ⚡️ Setup Instructions
+
+1. **Copy Environment File**
+	- Duplicate `.env.example` as `.env` in the project root.
+
+2. **Get API Tokens & Configure .env**
+	- Obtain your **OpenAI API key** and **Gemini API key**.
+	- [Create a Slack bot](https://api.slack.com/apps) and get the bot token.
+	- Fill in all required values in your `.env` file.
+
+3. **Seed the Database**
+	- Run the following command to generate seed data:
+	  ```bash
+	  python seed_data.py
+	  ```
+
+4. **Run the Bot**
+	- Start the main bot process:
+	  ```bash
+	  python main.py
+	  ```
+
+5. **Using the Slack Bot**
+	- In your Slack workspace, use the following commands:
+	  - `/dev-help` — Show help and available commands
+	  - `/dev-report [daily|weekly|monthly] [repo_owner/repo_name]` — Get engineering insights for a given period and repository
+
+---
+
 ### 🚀 Hiring Opportunity
 
 **We're hiring!** This challenge is part of our recruitment process for engineering positions. We offer both **remote** and **on-site** work options to accommodate your preferences and lifestyle.
@@ -71,31 +100,6 @@ Original work only; public libs are fine. Don’t commit real secrets. We may op
 
 > **Ready?** Fork ✦ Build ✦ PR ✦ Impress us.
 > Questions → **[founder@powersmy.biz](mailto:founder@powersmy.biz)**
-
----
-
-## Setup Instructions
-
-1. Copy `.env.example` to `.env`:
-	```sh
-	cp .env.example .env
-	```
-
-2. Obtain your OpenAI and Gemini API tokens, create a Slack bot, and add these values to your `.env` file.
-
-3. Generate seed data:
-	```sh
-	python seed_data.py
-	```
-
-4. Start the bot:
-	```sh
-	python main.py
-	```
-
-5. Usage (in Slack):
-	- `/dev-help`
-	- `/dev-report [daily|weekly|monthly] [repo_owner/repo_name]`
 
 ---
 
