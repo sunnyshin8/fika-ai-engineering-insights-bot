@@ -102,7 +102,7 @@ class EngineeringInsightsOrchestrator:
                 start_date = end_date - timedelta(days=30)
             
             # Get repository ID (use a default for demo)
-            repository_id = 12345  # This would come from the database in a real implementation
+            repository_id = self.data_harvester.github.get_repo(state['repository']).id
             
             # Calculate DORA metrics
             dora_metrics = self.diff_analyst.calculate_dora_metrics(

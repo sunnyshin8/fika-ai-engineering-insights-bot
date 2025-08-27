@@ -279,6 +279,11 @@ class Database:
                                            commit_data["repository"]["full_name"],
                                            commit_data["repository"]["owner"])
         
+        # Ensure commit is not added if it already exists
+        existing_commit = session.query(DBCommit).filter_by(sha=commit_data["sha"]).first()
+        if existing_commit:
+              return existing_commit
+        
         # Handle timestamp conversion
         timestamp = commit_data["timestamp"]
         if isinstance(timestamp, str):
